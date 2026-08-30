@@ -14,8 +14,8 @@ This repository contains the complete implementation of an AI-Powered IPsec VPN 
   - Automated scenario switching & capture scripts (`run_scenario.sh`, `run_all.sh`, `run_scenario.ps1`, `run_all.ps1`)
   - Standalone dataset generator (`lab/generate_sample_pcaps.py`)
   - Initialized labeled dataset in `data/pcaps/` and `data/labels.csv`
-- **Workstream B: AI/ML & Parsers** (Phases 4–5) — Ready for integration
-- **Workstream C: Assessment Engine, Streamlit Dashboard & Reports** (Phases 6–9) — Ready for integration
+- **Workstream B: AI/ML & Parsers** (Phases 4–5) — Remaining
+- **Workstream C: Assessment Engine, Streamlit Dashboard & Reports** (Phases 6–9) — Remaining
 
 ---
 
