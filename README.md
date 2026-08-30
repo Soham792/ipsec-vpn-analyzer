@@ -1,8 +1,4 @@
 # AI-Powered IPsec VPN Protocol Analyzer and Security Assessment Framework
-### SIH26160 — 1-Day Working Prototype Build
-
-This repository contains the complete implementation of an AI-Powered IPsec VPN Protocol Analyzer and Security Assessment Framework.
-
 ---
 
 ## Architecture & Workstream Status
