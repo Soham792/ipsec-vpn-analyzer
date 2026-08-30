@@ -1,0 +1,15 @@
+scenario_id,mode,encryption,integrity,dh_group,pfs,ike_version,ip_version,traffic_type,pcap_path
+S01,tunnel,AES-256-GCM,AEAD,14,true,IKEv2,IPv4,web,data/pcaps/S01_tunnel_aes256gcm_dh14_pfson_ipv4_web.pcap
+S02,transport,AES-128-CBC,HMAC-SHA256,2,false,IKEv2,IPv4,email,data/pcaps/S02_transport_aes128cbc_dh2_pfsoff_ipv4_email.pcap
+S03,tunnel,AES-128-GCM,AEAD,19,true,IKEv2,IPv4,voip,data/pcaps/S03_tunnel_aes128gcm_dh19_pfson_ipv4_voip.pcap
+S04,tunnel,AES-256-CBC,HMAC-SHA512,14,true,IKEv2,IPv4,video,data/pcaps/S04_tunnel_aes256cbc_dh14_pfson_ipv4_video.pcap
+S05,transport,AES-256-GCM,AEAD,19,true,IKEv2,IPv4,chat,data/pcaps/S05_transport_aes256gcm_dh19_pfson_ipv4_chat.pcap
+S06,tunnel,3DES-CBC,HMAC-SHA1,2,false,IKEv2,IPv4,icmp,data/pcaps/S06_tunnel_3descbc_dh2_pfsoff_ipv4_icmp.pcap
+S07,tunnel,AES-128-CBC,HMAC-MD5,1,false,IKEv1,IPv4,web,data/pcaps/S07_tunnel_aes128cbc_dh1_pfsoff_ipv4_web.pcap
+S08,tunnel,AES-256-GCM,AEAD,20,true,IKEv2,IPv4,video,data/pcaps/S08_tunnel_aes256gcm_dh20_pfson_ipv4_video.pcap
+S09,transport,AES-128-GCM,AEAD,14,false,IKEv2,IPv4,email,data/pcaps/S09_transport_aes128gcm_dh14_pfsoff_ipv4_email.pcap
+S10,tunnel,AES-256-CBC,HMAC-SHA256,5,false,IKEv2,IPv4,voip,data/pcaps/S10_tunnel_aes256cbc_dh5_pfsoff_ipv4_voip.pcap
+S11,tunnel,AES-256-GCM,AEAD,14,true,IKEv2,IPv6,chat,data/pcaps/S11_tunnel_aes256gcm_dh14_pfson_ipv6_chat.pcap
+S12,transport,AES-256-GCM,AEAD,19,true,IKEv2,IPv6,icmp,data/pcaps/S12_transport_aes256gcm_dh19_pfson_ipv6_icmp.pcap
+S13,tunnel,AES-256-CBC,HMAC-SHA1,14,true,IKEv1,IPv4,web,data/pcaps/S13_tunnel_aes256cbc_dh14_pfson_ipv4_web.pcap
+S14,tunnel,CHACHA20-POLY1305,AEAD,31,true,IKEv2,IPv4,voip,data/pcaps/S14_tunnel_chacha20poly1305_dh31_pfson_ipv4_voip.pcap
