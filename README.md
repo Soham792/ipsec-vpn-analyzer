@@ -262,8 +262,8 @@ The complete prototype integrates six functional layers into a single, end-to-en
 1. **IPsec Protocol Analysis** — Deterministic decoding of IKEv1/IKEv2 negotiation packets: exchange type, transform proposals, Diffie-Hellman group, and authentication method.
 2. **Security Configuration Assessment** — Rule-based evaluation of negotiated cryptographic parameters against NIST SP 800-77 Rev. 1 and RFC 8247, producing a composite security score and finding list.
 3. **Encrypted Traffic Classification** — Statistical feature extraction from ESP flows combined with a Random Forest classifier to identify application traffic types (Web, Email, VoIP, Video, Chat, ICMP) without payload decryption.
-4. **Metadata Exposure Assessment** *(Planned)* — Quantification of how much application-level information is potentially inferable from observable encrypted traffic metadata, expressed as a Metadata Exposure Score and categorical risk level (Low / Moderate / High / Critical).
-5. **Dashboard Visualisation** *(Planned)* — Interactive Streamlit interface combining protocol metadata, security findings, traffic classification results, and metadata exposure assessment in a single reviewable view.
+4. **Metadata Exposure Assessment**  — Quantification of how much application-level information is potentially inferable from observable encrypted traffic metadata, expressed as a Metadata Exposure Score and categorical risk level (Low / Moderate / High / Critical).
+5. **Dashboard Visualisation**  — Interactive Streamlit interface combining protocol metadata, security findings, traffic classification results, and metadata exposure assessment in a single reviewable view.
 6. **PDF Reporting** *(Planned)* — Automated generation of Executive Summary and Technical Audit reports covering all assessment dimensions.
 
 ---
