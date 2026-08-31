@@ -1,10 +1,14 @@
 """
-IPsec VPN Analyzer — Streamlit Dashboard (Phase 8)
+IPsec VPN Analyzer — Streamlit Dashboard
 
-Dashboard for the Phase 6/7 IPsec VPN analysis pipeline.
+Phase 8:
+    Streamlit dashboard for the IPsec VPN analyzer.
 
-Uses the real analyze_pcap() output currently implemented in:
-    src/pipeline.py
+Phase 9:
+    Integrated Executive and Technical PDF report generation.
+
+The dashboard is built against the actual Phase 7 analyze_pcap()
+output rather than the original idealized implementation.md shape.
 """
 
 import glob
@@ -18,10 +22,20 @@ import streamlit as st
 
 
 # --------------------------------------------------------------------------
-# Configuration
+# Python path
 # --------------------------------------------------------------------------
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(
+    0,
+    os.path.dirname(
+        os.path.abspath(__file__)
+    ),
+)
+
+
+# --------------------------------------------------------------------------
+# Streamlit configuration
+# --------------------------------------------------------------------------
 
 st.set_page_config(
     page_title="IPsec VPN Analyzer",
@@ -29,108 +43,167 @@ st.set_page_config(
     layout="wide",
 )
 
+
+# --------------------------------------------------------------------------
+# Paths
+# --------------------------------------------------------------------------
+
 PCAP_DIR = "data/pcaps"
 LABELS_CSV = "data/labels.csv"
+REPORT_DIR = "reports"
 
 
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
 
-def get_first(data, keys, default="N/A"):
-    """Return the first non-empty value found for the supplied keys."""
-    if not isinstance(data, dict):
+def get_first(d, keys, default="N/A"):
+    """
+    Look up the first available key from a list of candidate names.
+
+    Supports direct dictionary keys.
+    """
+
+    if not isinstance(d, dict):
         return default
 
     for key in keys:
-        if key in data and data[key] not in (None, ""):
-            return data[key]
+
+        if (
+            key in d
+            and d[key] not in (None, "")
+        ):
+            return d[key]
 
     return default
 
 
 def status_icon(value):
     """Return a simple status icon for common security values."""
-    if isinstance(value, bool):
-        return "🟢" if value else "🔴"
 
-    normalized = str(value).strip().lower()
-
-    if normalized in {
-        "strong",
-        "enabled",
-        "ikev2",
-        "tunnel",
-        "low",
-        "true",
-    }:
+    if value in (
+        "Strong",
+        "Enabled",
+        "IKEv2",
+        "Tunnel",
+        "Low",
+        True,
+    ):
         return "🟢"
 
-    if normalized in {
-        "medium",
+    if value in (
+        "Medium",
         "1536-bit",
-    }:
+    ):
         return "🟡"
 
-    if normalized in {
-        "weak",
-        "disabled",
-        "ikev1",
-        "critical",
-        "high",
-        "false",
-    }:
+    if value in (
+        "Weak",
+        "Disabled",
+        "IKEv1",
+        "Critical",
+        "High",
+        False,
+    ):
         return "🔴"
 
     return "⚪"
 
 
-def format_value(value):
-    """Make boolean values more readable in the dashboard."""
-    if isinstance(value, bool):
-        return "Enabled" if value else "Disabled"
+def confidence_percent(value):
+    """
+    Convert a model confidence value to a percentage.
 
-    return str(value)
+    Actual pipeline values are normally decimals:
+
+        0.90 -> 90.0%
+
+    Already-converted percentages are also accepted.
+    """
+
+    if not isinstance(
+        value,
+        (int, float),
+    ):
+        return None
+
+    if 0 <= value <= 1:
+        return value * 100
+
+    return float(value)
 
 
-@st.cache_resource(show_spinner=False)
+# --------------------------------------------------------------------------
+# Pipeline loader
+# --------------------------------------------------------------------------
+
+@st.cache_resource(
+    show_spinner=False
+)
 def load_pipeline():
-    """Load the Phase 7 pipeline lazily."""
+    """
+    Import analyze_pcap lazily.
+    """
+
     try:
+
         from src.pipeline import analyze_pcap
+
     except ImportError as exc:
+
         st.error(
-            "Could not import `analyze_pcap` from `src/pipeline.py`.\n\n"
-            "Make sure Phase 6/7 is present in this checkout.\n\n"
+            "Could not import `analyze_pcap` from "
+            "`src/pipeline.py`.\n\n"
+            "Make sure the Phase 6/7 pipeline is present "
+            "in this checkout.\n\n"
             f"Import error: {exc}"
         )
+
         st.stop()
 
     return analyze_pcap
 
 
+# --------------------------------------------------------------------------
+# Scenario loading
+# --------------------------------------------------------------------------
+
 def list_bundled_scenarios():
     """
     Load bundled scenarios from labels.csv.
 
-    Falls back to the PCAP directory if labels.csv is unavailable.
+    Falls back to scanning data/pcaps if labels.csv cannot be read.
     """
-    if os.path.exists(LABELS_CSV):
-        try:
-            df = pd.read_csv(LABELS_CSV)
 
-            if "pcap_path" in df.columns:
-                return df
+    if os.path.exists(
+        LABELS_CSV
+    ):
+
+        try:
+
+            dataframe = pd.read_csv(
+                LABELS_CSV
+            )
+
+            if "pcap_path" in dataframe.columns:
+                return dataframe
 
         except Exception:
             pass
 
-    paths = sorted(glob.glob(os.path.join(PCAP_DIR, "*.pcap")))
+    paths = sorted(
+        glob.glob(
+            os.path.join(
+                PCAP_DIR,
+                "*.pcap",
+            )
+        )
+    )
 
     return pd.DataFrame(
         {
             "scenario_id": [
-                os.path.basename(path).split("_")[0]
+                os.path.basename(path)
                 for path in paths
             ],
             "pcap_path": paths,
@@ -138,154 +211,17 @@ def list_bundled_scenarios():
     )
 
 
-def build_traffic_chart(result):
-    """
-    Build a Plotly chart from traffic information actually exposed
-    by the Phase 7 pipeline.
-
-    If raw packet_sizes are available, display their distribution.
-
-    Otherwise, display a useful summary chart using the available
-    ESP packet count and prediction confidence.
-    """
-    packet_sizes = result.get("packet_sizes")
-
-    if isinstance(packet_sizes, list) and packet_sizes:
-        fig = go.Figure(
-            data=[
-                go.Histogram(
-                    x=packet_sizes,
-                    nbinsx=30,
-                )
-            ]
-        )
-
-        fig.update_layout(
-            title="ESP Packet Size Distribution",
-            xaxis_title="Packet Size (bytes)",
-            yaxis_title="Packet Count",
-            height=350,
-            margin=dict(l=10, r=10, t=50, b=10),
-        )
-
-        return fig
-
-    traffic_prediction = result.get("traffic_prediction", {})
-
-    if not isinstance(traffic_prediction, dict):
-        traffic_prediction = {}
-
-    label = traffic_prediction.get("label", "Unknown")
-    confidence = traffic_prediction.get("confidence", 0.0)
-
-    if not isinstance(confidence, (int, float)):
-        confidence = 0.0
-
-    if confidence <= 1:
-        confidence_percent = confidence * 100
-    else:
-        confidence_percent = confidence
-
-    esp_count = result.get("esp_packet_count", 0)
-
-    if not isinstance(esp_count, (int, float)):
-        esp_count = 0
-
-    fig = go.Figure(
-        data=[
-            go.Bar(
-                x=[
-                    "ESP Packets",
-                    "AI Confidence (%)",
-                ],
-                y=[
-                    esp_count,
-                    confidence_percent,
-            ],
-                text=[
-                    f"{int(esp_count)}",
-                    f"{confidence_percent:.1f}%",
-                ],
-                textposition="auto",
-            )
-        ]
-    )
-
-    fig.update_layout(
-        title=f"Traffic Analysis — Predicted: {label}",
-        yaxis_title="Value",
-        height=350,
-        margin=dict(l=10, r=10, t=50, b=10),
-    )
-
-    return fig
-
-
-def build_threat_dataframe(threat_matrix):
-    """Convert the pipeline threat matrix into a sorted DataFrame."""
-    rows = []
-
-    if not isinstance(threat_matrix, list):
-        return pd.DataFrame()
-
-    for entry in threat_matrix:
-        if not isinstance(entry, dict):
-            continue
-
-        rows.append(
-            {
-                "Parameter": get_first(
-                    entry,
-                    ["parameter"],
-                ),
-                "Finding": get_first(
-                    entry,
-                    ["finding", "note"],
-                ),
-                "Severity": get_first(
-                    entry,
-                    ["severity"],
-                ),
-                "Recommendation": get_first(
-                    entry,
-                    ["recommendation"],
-                ),
-            }
-        )
-
-    if not rows:
-        return pd.DataFrame()
-
-    df = pd.DataFrame(rows)
-
-    severity_order = {
-        "Critical": 0,
-        "High": 1,
-        "Medium": 2,
-        "Low": 3,
-    }
-
-    df["_sort"] = (
-        df["Severity"]
-        .map(severity_order)
-        .fillna(9)
-    )
-
-    df = (
-        df.sort_values("_sort")
-        .drop(columns="_sort")
-        .reset_index(drop=True)
-    )
-
-    return df
-
-
 # --------------------------------------------------------------------------
 # Sidebar
 # --------------------------------------------------------------------------
 
-st.sidebar.title("🔐 IPsec VPN Analyzer")
-st.sidebar.caption("AI-Powered Security Assessment Framework")
+st.sidebar.title(
+    "🔐 IPsec VPN Analyzer"
+)
+
+st.sidebar.caption(
+    "AI-Powered Security Assessment Framework"
+)
 
 scenarios_df = list_bundled_scenarios()
 
@@ -297,6 +233,7 @@ source_mode = st.sidebar.radio(
     ],
 )
 
+
 pcap_path = None
 selected_scenario = None
 
@@ -306,8 +243,8 @@ if source_mode == "Bundled scenario":
     if scenarios_df.empty:
 
         st.sidebar.warning(
-            f"No scenarios found in {LABELS_CSV} "
-            f"or {PCAP_DIR}/"
+            f"No scenarios found in "
+            f"{LABELS_CSV} or {PCAP_DIR}/"
         )
 
     else:
@@ -317,63 +254,77 @@ if source_mode == "Bundled scenario":
         else:
             label_col = scenarios_df.columns[0]
 
-        choices = scenarios_df[label_col].tolist()
-
-        selected_scenario = st.sidebar.selectbox(
+        choice = st.sidebar.selectbox(
             "Scenario",
-            choices,
+            scenarios_df[
+                label_col
+            ].tolist(),
         )
 
-        matching_rows = scenarios_df[
-            scenarios_df[label_col] == selected_scenario
-        ]
+        selected_scenario = str(
+            choice
+        )
 
-        if not matching_rows.empty:
+        row = scenarios_df[
+            scenarios_df[
+                label_col
+            ] == choice
+        ].iloc[0]
 
-            row = matching_rows.iloc[0]
+        pcap_path = row.get(
+            "pcap_path",
+            os.path.join(
+                PCAP_DIR,
+                f"{choice}.pcap",
+            ),
+        )
 
-            pcap_path = row.get(
-                "pcap_path",
-                None,
+        with st.sidebar.expander(
+            "Ground truth (labels.csv)"
+        ):
+
+            st.write(
+                row.to_dict()
             )
-
-            if pcap_path and not os.path.isabs(pcap_path):
-                pcap_path = os.path.normpath(pcap_path)
-
-            with st.sidebar.expander(
-                "Ground truth (labels.csv)"
-            ):
-                st.write(row.to_dict())
 
 
 else:
 
     uploaded = st.sidebar.file_uploader(
         "Upload a .pcap file",
-        type=["pcap", "pcapng"],
+        type=[
+            "pcap",
+            "pcapng",
+        ],
     )
 
     if uploaded is not None:
 
-        upload_dir = os.path.join(
-            PCAP_DIR,
-            "_uploaded",
-        )
-
         os.makedirs(
-            upload_dir,
+            os.path.join(
+                PCAP_DIR,
+                "_uploaded",
+            ),
             exist_ok=True,
         )
 
         pcap_path = os.path.join(
-            upload_dir,
+            PCAP_DIR,
+            "_uploaded",
             uploaded.name,
+        )
+
+        selected_scenario = (
+            os.path.splitext(
+                uploaded.name
+            )[0]
         )
 
         with open(
             pcap_path,
             "wb",
         ) as file:
+
             file.write(
                 uploaded.getbuffer()
             )
@@ -385,11 +336,13 @@ analyze_clicked = st.sidebar.button(
     use_container_width=True,
 )
 
+
 st.sidebar.divider()
 
 st.sidebar.caption(
-    "Traffic-type prediction is based on encrypted-flow "
-    "metadata such as packet size and timing, not decrypted payload."
+    "Traffic-type prediction is based on "
+    "encrypted-flow metadata "
+    "(packet size/timing), not decrypted payload."
 )
 
 
@@ -397,120 +350,153 @@ st.sidebar.caption(
 # Main
 # --------------------------------------------------------------------------
 
-st.title("IPsec VPN Protocol Analyzer")
-
-st.markdown(
-    """
-    Analyze an IPsec VPN packet capture to assess its security posture,
-    identify configuration weaknesses, and predict encrypted traffic type.
-    """
+st.title(
+    "IPsec VPN Protocol Analyzer"
 )
 
 
-if not analyze_clicked or not pcap_path:
+# --------------------------------------------------------------------------
+# Persist analysis results across Streamlit reruns
+# --------------------------------------------------------------------------
 
-    st.info(
-        "Pick a scenario (or upload a PCAP) in the sidebar, "
-        "then click **Analyze**."
-    )
+if "analysis_result" not in st.session_state:
+    st.session_state.analysis_result = None
 
-    st.stop()
+if "analysis_pcap_path" not in st.session_state:
+    st.session_state.analysis_pcap_path = None
 
-
-if not os.path.exists(pcap_path):
-
-    st.error(
-        f"PCAP not found on disk: `{pcap_path}`"
-    )
-
-    st.stop()
-
-
-analyze_pcap = load_pipeline()
+if "analysis_scenario" not in st.session_state:
+    st.session_state.analysis_scenario = None
 
 
 # --------------------------------------------------------------------------
-# Run pipeline
+# Run analysis only when Analyze is clicked
 # --------------------------------------------------------------------------
 
-with st.spinner(
-    "Parsing PCAP, running classifier, "
-    "and scoring security posture..."
-):
+if analyze_clicked:
 
-    try:
+    if not pcap_path:
 
-        result = analyze_pcap(
-            pcap_path
+        st.info(
+            "Pick a scenario (or upload a pcap) "
+            "in the sidebar, then click **Analyze**."
         )
-
-    except Exception as exc:
-
-        st.error(
-            f"analyze_pcap() raised an exception: {exc}"
-        )
-
-        st.exception(exc)
 
         st.stop()
 
+    if not os.path.exists(
+        pcap_path
+    ):
 
-if not isinstance(result, dict):
+        st.error(
+            f"PCAP not found on disk: `{pcap_path}`"
+        )
 
-    st.error(
-        "The pipeline did not return a dictionary."
+        st.stop()
+
+    analyze_pcap = load_pipeline()
+
+    with st.spinner(
+        "Parsing pcap, running classifier, "
+        "scoring security posture..."
+    ):
+
+        try:
+
+            result = analyze_pcap(
+                pcap_path
+            )
+
+        except Exception as exc:
+
+            st.error(
+                f"analyze_pcap() raised an exception: {exc}"
+            )
+
+            st.exception(
+                exc
+            )
+
+            st.stop()
+
+    if not isinstance(
+        result,
+        dict,
+    ):
+
+        st.error(
+            "The pipeline did not return a dictionary."
+        )
+
+        st.stop()
+
+    # Store result in Streamlit session state.
+    # This is essential because every Streamlit button click
+    # causes the script to rerun.
+    st.session_state.analysis_result = result
+    st.session_state.analysis_pcap_path = pcap_path
+    st.session_state.analysis_scenario = selected_scenario
+
+
+# --------------------------------------------------------------------------
+# Recover previous analysis after a Streamlit rerun
+# --------------------------------------------------------------------------
+
+result = st.session_state.analysis_result
+
+
+if result is None:
+
+    st.info(
+        "Pick a scenario (or upload a pcap) "
+        "in the sidebar, then click **Analyze**."
     )
 
     st.stop()
 
 
+if st.session_state.analysis_scenario:
+
+    selected_scenario = (
+        st.session_state.analysis_scenario
+    )
+
+
+if st.session_state.analysis_pcap_path:
+
+    pcap_path = (
+        st.session_state.analysis_pcap_path
+    )
+
+
 # --------------------------------------------------------------------------
-# Extract real Phase 7 output
+# Extract actual Phase 7 output
 # --------------------------------------------------------------------------
 
 ike_info = result.get(
     "ike_info",
     {},
-)
+) or {}
 
 risk = result.get(
     "risk",
     {},
-)
+) or {}
 
 traffic_prediction = result.get(
     "traffic_prediction",
     {},
-)
+) or {}
 
-if not isinstance(traffic_prediction, dict):
-    traffic_prediction = {}
-
-
-threat_matrix = get_first(
-    risk,
-    ["threat_matrix"],
+threat_matrix = risk.get(
+    "threat_matrix",
     [],
-)
+) or []
 
-# if not threat_matrix:
-#     threat_matrix = result.get(
-#         "findings",
-#         [],
-#     )
-
-
-# Phase 7 stores enrichment notes inside ike_info.
 enrichment_notes = ike_info.get(
     "_enrichment_notes",
     [],
-)
-
-if not enrichment_notes:
-    enrichment_notes = result.get(
-        "_enrichment_notes",
-        [],
-    )
+) or []
 
 
 # --------------------------------------------------------------------------
@@ -527,6 +513,7 @@ score = get_first(
     None,
 )
 
+
 risk_level = get_first(
     risk,
     [
@@ -536,18 +523,24 @@ risk_level = get_first(
     "Unknown",
 )
 
-ai_conf = traffic_prediction.get(
-    "confidence",
+
+ai_conf = get_first(
+    traffic_prediction,
+    [
+        "confidence",
+    ],
     None,
 )
 
-traffic_label = traffic_prediction.get(
-    "label",
-    "N/A",
+
+ai_conf_percent = confidence_percent(
+    ai_conf
 )
 
 
-c1, c2, c3 = st.columns(3)
+c1, c2, c3 = st.columns(
+    3
+)
 
 
 with c1:
@@ -574,26 +567,18 @@ with c2:
 
     st.metric(
         "Risk Level",
-        f"{status_icon(risk_level)} {risk_level}",
+        f"{status_icon(risk_level)} "
+        f"{risk_level}",
     )
 
 
 with c3:
 
-    if isinstance(
-        ai_conf,
-        (int, float),
-    ):
-
-        confidence_percent = (
-            ai_conf * 100
-            if ai_conf <= 1
-            else ai_conf
-        )
+    if ai_conf_percent is not None:
 
         st.metric(
             "AI Confidence",
-            f"{confidence_percent:.1f}%",
+            f"{ai_conf_percent:.1f}%",
         )
 
     else:
@@ -626,12 +611,34 @@ st.divider()
 
 
 # --------------------------------------------------------------------------
-# Protocol Identification
+# Protocol identification
 # --------------------------------------------------------------------------
 
 st.subheader(
     "Protocol Identification"
 )
+
+
+key_lifetime = get_first(
+    ike_info,
+    [
+        "key_lifetime_hours",
+        "key_lifetime",
+        "lifetime",
+    ],
+    "N/A",
+)
+
+
+if key_lifetime != "N/A":
+
+    key_lifetime_display = (
+        f"{key_lifetime} hours"
+    )
+
+else:
+
+    key_lifetime_display = "N/A"
 
 
 protocol_fields = [
@@ -642,15 +649,6 @@ protocol_fields = [
             [
                 "ike_version",
                 "version",
-            ],
-        ),
-    ),
-    (
-        "Exchange Type",
-        get_first(
-            ike_info,
-            [
-                "exchange_type",
             ],
         ),
     ),
@@ -701,14 +699,7 @@ protocol_fields = [
     ),
     (
         "Key Lifetime",
-        get_first(
-            ike_info,
-            [
-                "key_lifetime_hours",
-                "key_lifetime",
-                "lifetime",
-            ],
-        ),
+        key_lifetime_display,
     ),
     (
         "Replay Protection",
@@ -731,20 +722,25 @@ protocol_fields = [
 ]
 
 
-cols = st.columns(3)
+cols = st.columns(
+    3
+)
 
 
 for index, (
     label,
     value,
-) in enumerate(protocol_fields):
+) in enumerate(
+    protocol_fields
+):
 
-    with cols[index % 3]:
+    with cols[
+        index % 3
+    ]:
 
         st.markdown(
             f"{status_icon(value)} "
-            f"**{label}:** "
-            f"{format_value(value)}"
+            f"**{label}:** {value}"
         )
 
 
@@ -752,7 +748,7 @@ st.divider()
 
 
 # --------------------------------------------------------------------------
-# Traffic Analysis
+# Traffic analysis
 # --------------------------------------------------------------------------
 
 st.subheader(
@@ -760,74 +756,126 @@ st.subheader(
 )
 
 
-traffic_col1, traffic_col2 = st.columns(
+tcol1, tcol2 = st.columns(
     [1, 2]
 )
 
 
-with traffic_col1:
+with tcol1:
 
-    st.markdown(
-        f"**Predicted type:** "
-        f"`{traffic_label}`"
+    traffic_label = get_first(
+        traffic_prediction,
+        [
+            "label",
+            "prediction",
+            "traffic_type",
+        ],
+        "N/A",
     )
 
-    if traffic_label == "insufficient_data":
+    if traffic_prediction:
+
+        st.markdown(
+            f"**Predicted type:** "
+            f"`{traffic_label}`"
+        )
+
+        if ai_conf_percent is not None:
+
+            st.progress(
+                min(
+                    ai_conf_percent / 100,
+                    1.0,
+                ),
+                text=(
+                    f"{ai_conf_percent:.1f}% "
+                    "confidence"
+                ),
+            )
+
+        esp_packet_count = result.get(
+            "esp_packet_count",
+            0,
+        )
+
+        st.metric(
+            "ESP Packets",
+            str(
+                esp_packet_count
+            ),
+        )
+
+        if traffic_label == "insufficient_data":
+
+            st.warning(
+                "Insufficient ESP traffic was available "
+                "for a reliable traffic classification."
+            )
+
+    else:
 
         st.warning(
-            "Insufficient ESP traffic was available "
-            "for a reliable traffic-type prediction."
+            "No traffic prediction returned."
         )
 
-    if isinstance(
-        ai_conf,
-        (int, float),
+
+with tcol2:
+
+    packet_sizes = result.get(
+        "packet_sizes"
+    )
+
+    if (
+        isinstance(
+            packet_sizes,
+            list,
+        )
+        and packet_sizes
     ):
 
-        confidence_percent = (
-            ai_conf * 100
-            if ai_conf <= 1
-            else ai_conf
+        fig = go.Figure(
+            data=[
+                go.Histogram(
+                    x=packet_sizes,
+                    nbinsx=30,
+                )
+            ]
         )
 
-        st.progress(
-            min(
-                confidence_percent / 100,
-                1.0,
-            ),
-            text=(
-                f"{confidence_percent:.1f}% confidence"
+        fig.update_layout(
+            title="ESP Packet Size Distribution",
+            xaxis_title="Packet size (bytes)",
+            yaxis_title="Count",
+            height=300,
+            margin=dict(
+                l=10,
+                r=10,
+                t=40,
+                b=10,
             ),
         )
 
-    esp_count = result.get(
-        "esp_packet_count",
-        0,
-    )
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+        )
 
-    st.metric(
-        "ESP Packets",
-        esp_count,
-    )
+    else:
 
-
-with traffic_col2:
-
-    chart = build_traffic_chart(
-        result
-    )
-
-    st.plotly_chart(
-        chart,
-        use_container_width=True,
-    )
+        st.caption(
+            "No per-packet size series is exposed "
+            "by the current pipeline output. "
+            "The traffic prediction shown here is "
+            "based on the existing ESP-flow feature "
+            "extraction and classifier."
+        )
 
 
 st.divider()
 
 
 # --------------------------------------------------------------------------
-# Threat Matrix
+# Threat matrix
 # --------------------------------------------------------------------------
 
 st.subheader(
@@ -835,23 +883,97 @@ st.subheader(
 )
 
 
-threat_df = build_threat_dataframe(
-    threat_matrix
-)
+if threat_matrix:
+
+    rows = []
+
+    for entry in threat_matrix:
+
+        if isinstance(
+            entry,
+            dict,
+        ):
+
+            rows.append(
+                {
+                    "Parameter": get_first(
+                        entry,
+                        [
+                            "parameter",
+                        ],
+                    ),
+                    "Finding": get_first(
+                        entry,
+                        [
+                            "finding",
+                            "note",
+                        ],
+                    ),
+                    "Severity": get_first(
+                        entry,
+                        [
+                            "severity",
+                        ],
+                    ),
+                    "Recommendation": get_first(
+                        entry,
+                        [
+                            "recommendation",
+                        ],
+                    ),
+                }
+            )
 
 
-if not threat_df.empty:
+    if rows:
 
-    st.dataframe(
-        threat_df,
-        use_container_width=True,
-        hide_index=True,
-    )
+        dataframe = pd.DataFrame(
+            rows
+        )
+
+        severity_order = {
+            "Critical": 0,
+            "High": 1,
+            "Medium": 2,
+            "Low": 3,
+        }
+
+        dataframe[
+            "_sort"
+        ] = dataframe[
+            "Severity"
+        ].map(
+            severity_order
+        ).fillna(
+            9
+        )
+
+        dataframe = (
+            dataframe
+            .sort_values(
+                "_sort"
+            )
+            .drop(
+                columns="_sort"
+            )
+        )
+
+        st.dataframe(
+            dataframe,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    else:
+
+        st.success(
+            "No structured threat-matrix entries."
+        )
 
 else:
 
     st.success(
-        "✅ No findings — every assessed parameter "
+        "✅ No findings — every parameter "
         "scored Strong."
     )
 
@@ -860,7 +982,7 @@ st.divider()
 
 
 # --------------------------------------------------------------------------
-# Reports — Phase 9 placeholders
+# Reports — Phase 9
 # --------------------------------------------------------------------------
 
 st.subheader(
@@ -868,7 +990,9 @@ st.subheader(
 )
 
 
-report_col1, report_col2 = st.columns(2)
+rcol1, rcol2 = st.columns(
+    2
+)
 
 
 try:
@@ -883,12 +1007,32 @@ try:
 
     reports_available = True
 
-except ImportError:
+except ImportError as exc:
 
     reports_available = False
+    report_import_error = exc
 
 
-with report_col1:
+os.makedirs(
+    REPORT_DIR,
+    exist_ok=True,
+)
+
+
+if not selected_scenario:
+
+    selected_scenario = os.path.splitext(
+        os.path.basename(
+            pcap_path
+        )
+    )[0]
+
+
+# --------------------------------------------------------------------------
+# Executive report
+# --------------------------------------------------------------------------
+
+with rcol1:
 
     if reports_available:
 
@@ -897,25 +1041,48 @@ with report_col1:
             use_container_width=True,
         ):
 
-            report_path = (
-                generate_executive_report(
-                    result
-                )
+            executive_path = os.path.join(
+                REPORT_DIR,
+                f"{selected_scenario}_executive.pdf",
             )
 
-            with open(
-                report_path,
-                "rb",
-            ) as file:
+            try:
+
+                generate_executive_report(
+                    result,
+                    executive_path,
+                    scenario_name=selected_scenario,
+                )
+
+                with open(
+                    executive_path,
+                    "rb",
+                ) as pdf_file:
+
+                    pdf_bytes = pdf_file.read()
+
+                st.success(
+                    "Executive report generated successfully."
+                )
 
                 st.download_button(
-                    "Download Executive Summary",
-                    file,
+                    "⬇️ Download Executive Summary",
+                    data=pdf_bytes,
                     file_name=os.path.basename(
-                        report_path
+                        executive_path
                     ),
                     mime="application/pdf",
                     use_container_width=True,
+                )
+
+            except Exception as exc:
+
+                st.error(
+                    "Could not generate the executive report."
+                )
+
+                st.exception(
+                    exc
                 )
 
     else:
@@ -924,60 +1091,74 @@ with report_col1:
             "Generate Executive Summary PDF",
             disabled=True,
             use_container_width=True,
-            help=(
-                "Build "
-                "src/reporting/executive_report.py "
-                "in Phase 9 to enable this."
-            ),
         )
 
-
-with report_col2:
-
-    if reports_available:
-
-        if st.button(
-            "Generate Technical Report PDF",
-            use_container_width=True,
-        ):
-
-            report_path = (
-                generate_technical_report(
-                    result
-                )
-            )
-
-            with open(
-                report_path,
-                "rb",
-            ) as file:
-
-                st.download_button(
-                    "Download Technical Report",
-                    file,
-                    file_name=os.path.basename(
-                        report_path
-                    ),
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
-
-    else:
-
-        st.button(
-            "Generate Technical Report PDF",
-            disabled=True,
-            use_container_width=True,
-            help=(
-                "Build "
-                "src/reporting/technical_report.py "
-                "in Phase 9 to enable this."
-            ),
+        st.error(
+            f"Reporting modules could not be imported: "
+            f"{report_import_error}"
         )
 
 
 # --------------------------------------------------------------------------
-# Metadata / Debug
+# Technical report
+# --------------------------------------------------------------------------
+
+with rcol2:
+
+    if reports_available:
+
+        if st.button(
+            "Generate Technical Report PDF",
+            use_container_width=True,
+        ):
+
+            technical_path = os.path.join(
+                REPORT_DIR,
+                f"{selected_scenario}_technical.pdf",
+            )
+
+            try:
+
+                generate_technical_report(
+                    result,
+                    technical_path,
+                    scenario_name=selected_scenario,
+                )
+
+                with open(
+                    technical_path,
+                    "rb",
+                ) as pdf_file:
+
+                    pdf_bytes = pdf_file.read()
+
+                st.success(
+                    "Technical report generated successfully."
+                )
+
+                st.download_button(
+                    "⬇️ Download Technical Report",
+                    data=pdf_bytes,
+                    file_name=os.path.basename(
+                        technical_path
+                    ),
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+
+            except Exception as exc:
+
+                st.error(
+                    "Could not generate the technical report."
+                )
+
+                st.exception(
+                    exc
+                )
+
+
+# --------------------------------------------------------------------------
+# Generated timestamp
 # --------------------------------------------------------------------------
 
 generated_at = get_first(
@@ -995,6 +1176,10 @@ st.caption(
     f"Generated at: {generated_at}"
 )
 
+
+# --------------------------------------------------------------------------
+# Raw pipeline output
+# --------------------------------------------------------------------------
 
 with st.expander(
     "🔧 Raw pipeline output "
