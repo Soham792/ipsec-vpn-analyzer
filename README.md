@@ -23,6 +23,13 @@ ESP Parser (Protocol 50 & UDP 4500 NAT-T, IPv4/IPv6)
 Random Forest Classifier (n_estimators=200, max_depth=8)
       ↓
 Traffic Classification + Confidence Score
+      ↓
+Metadata Exposure Assessment
+(Packet-size distribution, IAT regularity, flow consistency, cross-session stability)
+      ↓
+Metadata Exposure Score + Risk Level (Low / Moderate / High / Critical)
+      ↓
+Dashboard / Reports
 ```
 
 ---
@@ -76,8 +83,43 @@ Traffic Classification + Confidence Score
 
 ### 3. Security Assessment, Dashboard & Reporting (Planned / In Development)
 * **Cryptographic Scoring Engine**: Mapping negotiated IKE/ESP parameters against NIST SP 800-77 Rev. 1 and RFC 8247 compliance standards.
-* **Interactive Streamlit Dashboard**: Web UI presenting security ratings, risk matrix, protocol breakdown, and Plotly packet size/IAT distributions.
+* **Interactive Streamlit Dashboard**: Web UI presenting security ratings, risk matrix, protocol breakdown, and Plotly packet size/IAT distributions. Planned dashboard panels include:
+  * Security Score card, Risk Level badge, and AI Confidence badge.
+  * **IPsec Protocol Metadata** panel — IKE version, IP version, IPsec mode, encryption, integrity, DH group, PFS status, key lifetime, and replay-protection status.
+  * **Traffic Analysis** panel — predicted application category and classification confidence, Plotly packet-size and IAT distribution charts.
+  * **Metadata Exposure Assessment** panel — application inference confidence, cross-session stability indicator, Metadata Exposure Score, and Metadata Exposure Risk Level.
+  * Threat Matrix table (severity-sorted findings).
+  * Download buttons for Executive Summary and Technical Audit PDF reports.
 * **PDF Reporting Engine**: Generation of Executive Summary and Technical Audit reports.
+
+#### Metadata Exposure Score *(Planned / In Development)*
+
+The Metadata Exposure Score quantifies **how much application-level information can potentially be inferred from observable, encrypted IPsec traffic metadata — without decrypting the application payload**. It assesses whether an external observer monitoring only packet sizes, timing, and flow structure could draw meaningful conclusions about the underlying application traffic.
+
+The assessment considers, where observable from the captured traffic:
+
+| Observable Characteristic | Description |
+|---|---|
+| Predicted traffic category | Application type inferred by the Random Forest classifier |
+| ML classification confidence | Certainty of the traffic category prediction |
+| Packet-size characteristics | Mean, standard deviation, min/max of ESP payload sizes |
+| Inter-arrival time (IAT) characteristics | Mean and standard deviation of packet inter-arrival times |
+| Flow regularity | Coefficient of variation of sizes and IAT indicating periodic/structured traffic |
+| Cross-session stability | Consistency of feature fingerprints across multiple sessions of the same application |
+| Other statistical characteristics | Bidirectional flow ratio, burst patterns, and packet count distributions |
+
+The assessment produces the following output fields:
+
+| Output Field | Description |
+|---|---|
+| **Application Inference Confidence** | Probability that the application type can be determined from metadata alone |
+| **Cross-Session Stability** | Degree to which the traffic fingerprint is reproducible across sessions |
+| **Metadata Exposure Score** | Composite score (0–100) indicating metadata leakage severity |
+| **Metadata Exposure Risk Level** | Categorical risk: **Low**, **Moderate**, **High**, or **Critical** |
+
+> **Note**: The Metadata Exposure Score measures potential information leakage through observable encrypted traffic metadata. It does **not** involve any decryption of application-layer payload content.
+
+
 
 ---
 
@@ -210,6 +252,19 @@ ipsec-analyzer/
         ├── train_traffic_classifier.py# Random Forest training pipeline
         └── predict.py                 # Traffic prediction and inference module
 ```
+
+---
+
+## Final System Description
+
+The complete prototype integrates six functional layers into a single, end-to-end security analysis pipeline:
+
+1. **IPsec Protocol Analysis** — Deterministic decoding of IKEv1/IKEv2 negotiation packets: exchange type, transform proposals, Diffie-Hellman group, and authentication method.
+2. **Security Configuration Assessment** — Rule-based evaluation of negotiated cryptographic parameters against NIST SP 800-77 Rev. 1 and RFC 8247, producing a composite security score and finding list.
+3. **Encrypted Traffic Classification** — Statistical feature extraction from ESP flows combined with a Random Forest classifier to identify application traffic types (Web, Email, VoIP, Video, Chat, ICMP) without payload decryption.
+4. **Metadata Exposure Assessment** *(Planned)* — Quantification of how much application-level information is potentially inferable from observable encrypted traffic metadata, expressed as a Metadata Exposure Score and categorical risk level (Low / Moderate / High / Critical).
+5. **Dashboard Visualisation** *(Planned)* — Interactive Streamlit interface combining protocol metadata, security findings, traffic classification results, and metadata exposure assessment in a single reviewable view.
+6. **PDF Reporting** *(Planned)* — Automated generation of Executive Summary and Technical Audit reports covering all assessment dimensions.
 
 ---
 
