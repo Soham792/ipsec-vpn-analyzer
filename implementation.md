@@ -370,6 +370,20 @@ def analyze_pcap(path: str) -> dict:
     risk = compute_risk(findings)
     return {
         "ike_info": ike_info,
+        # Flattened metadata dict for direct dashboard consumption.
+        # All nine fields below must be populated (or set to "Unknown" if the
+        # parser cannot determine the value from the capture).
+        "ike_metadata": {
+            "ike_version":      ike_info.get("ike_version", "Unknown"),   # e.g. "IKEv2"
+            "ip_version":       ike_info.get("ip_version",  "Unknown"),   # e.g. "IPv4" / "IPv6"
+            "mode":             ike_info.get("mode",        "Unknown"),   # "Tunnel" / "Transport"
+            "encryption":       ike_info.get("encryption",  "Unknown"),   # e.g. "AES-256-GCM"
+            "integrity":        ike_info.get("integrity",   "Unknown"),   # e.g. "AEAD" / "HMAC-SHA256"
+            "dh_group":         ike_info.get("dh_group",    "Unknown"),   # e.g. "14 (MODP-2048)"
+            "pfs":              ike_info.get("pfs",         "Unknown"),   # "Enabled" / "Disabled"
+            "key_lifetime":     ike_info.get("key_lifetime","Unknown"),   # e.g. "3600s"
+            "replay_protection":ike_info.get("replay_protection","Unknown"), # "Enabled" / "Disabled"
+        },
         "traffic_predictions": traffic_preds,
         "findings": findings,
         "risk": risk,
@@ -379,7 +393,7 @@ def analyze_pcap(path: str) -> dict:
 Until B's real parser/classifier are ready, C can stub `parse_ike`/`parse_esp`/`predict_traffic` with fake data matching the agreed shape from §3 Step 0, and swap in the real functions at Sync Point 2.
 
 **How to verify it worked:**
-- Call `analyze_pcap()` against a real pcap once B's modules are wired in; confirm every key is populated sensibly.
+- Call `analyze_pcap()` against a real pcap once B's modules are wired in; confirm every key is populated sensibly, and in particular that `result["ike_metadata"]` contains all nine fields with non-`None` values.
 
 **Ask to continue with:**
 "Phase 7 complete — pipeline function works [against mock data / against a real pcap]. Ready to start Phase 8: the dashboard?"
@@ -394,14 +408,29 @@ Until B's real parser/classifier are ready, C can stub `parse_ike`/`parse_esp`/`
 `app.py`, single page:
 1. Sidebar: pcap uploader or dropdown of bundled real scenarios; "Analyze" button.
 2. Header cards: Security Score, Risk Level badge, AI Confidence badge.
-3. Protocol Identification panel: IKE version, mode, encryption, integrity, DH group, PFS, key lifetime, each with a status icon.
-4. Traffic Analysis panel: predicted traffic type + confidence, Plotly packet-size chart.
-5. Threat Matrix table, severity-sorted.
-6. Download buttons for both PDF reports.
-7. (Stretch, only if ahead) batch comparison across all captured scenarios.
+3. **IPsec Protocol Metadata section** — a dedicated, clearly-labelled panel rendered from `analyze_pcap()["ike_metadata"]` that displays all nine of the following fields (each with a label and its parsed value; show "Unknown" if the field was not determinable from the capture):
+
+   | Field               | Source key in `ike_metadata`  | Example value          |
+   |---------------------|-------------------------------|------------------------|
+   | IKE Version         | `ike_version`                 | IKEv2                  |
+   | IP Version          | `ip_version`                  | IPv4 / IPv6            |
+   | IPsec Mode          | `mode`                        | Tunnel / Transport     |
+   | Encryption          | `encryption`                  | AES-256-GCM            |
+   | Integrity           | `integrity`                   | AEAD / HMAC-SHA256     |
+   | DH Group            | `dh_group`                    | 14 (MODP-2048)         |
+   | PFS                 | `pfs`                         | Enabled / Disabled     |
+   | Key Lifetime        | `key_lifetime`                | 3600s                  |
+   | Replay Protection   | `replay_protection`           | Enabled / Disabled     |
+
+4. Protocol Identification panel: IKE version, mode, encryption, integrity, DH group, PFS, key lifetime, each with a status icon (this panel may share or reference data from the IPsec Protocol Metadata section above).
+5. Traffic Analysis panel: predicted traffic type + confidence, Plotly packet-size chart.
+6. Threat Matrix table, severity-sorted.
+7. Download buttons for both PDF reports.
+8. (Stretch, only if ahead) batch comparison across all captured scenarios.
 
 **How to verify it worked:**
 - `streamlit run app.py` launches; analyzing a scenario populates every panel with real (or, pre-integration, mock) data.
+- The IPsec Protocol Metadata section is visible and all nine field rows are rendered with non-empty values for at least three real scenarios from `data/pcaps/`.
 
 **Ask to continue with:**
 "Phase 8 complete — dashboard is live and functional. Ready to start Phase 9: reports and final integration?"
